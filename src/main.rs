@@ -105,20 +105,20 @@ fn update_humidity_stats(day_summary: &mut DaySummaryStats, record: &Record) {
     // Add the humidity to the accumulated sum
     day_summary.humidity_stats.humidity_sum += record.humidity;
 
-    // First add the record to the temperature stat entries.
+    // First add the record to the humidity stat entries.
     day_summary.humidity_stats.humidity_entries.push(record.humidity);
 
-    // Find the max temperature.
+    // Find the max humidity.
     day_summary.humidity_stats.max_humidity = *day_summary.humidity_stats.humidity_entries.iter().max_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
 
-    // Find the min temperature.
+    // Find the min humidity.
     day_summary.humidity_stats.min_humidity = *day_summary.humidity_stats.humidity_entries.iter().min_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
 
-    // Find the median temperature.
+    // Find the median humidity.
     let median_index = day_summary.humidity_stats.humidity_entries.len() / 2;
     day_summary.humidity_stats.median_humidity = day_summary.humidity_stats.humidity_entries[median_index];
 
-    // Find the mean temperature.
+    // Find the mean humidity.
     let mean_denominator = day_summary.humidity_stats.humidity_entries.len() as f32;
     day_summary.humidity_stats.mean_humidity = day_summary.humidity_stats.humidity_sum / mean_denominator;
 }
