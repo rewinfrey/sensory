@@ -66,8 +66,8 @@ struct HumidityStats {
 }
 
 #[derive(Debug, Clone)]
-struct DaySummaryStats {
-    pub date: NaiveDate,
+struct DaySummaryStats<T> {
+    pub date: T,
     pub temperature_stats: TemperatureStats,
     pub humidity_stats: HumidityStats,
 }
