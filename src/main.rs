@@ -8,6 +8,27 @@ struct Record<T> {
     pub humidity: f32,
 }
 
+impl Record<NaiveDate> {
+    fn from_csv_record(record: csv::StringRecord) -> Self {
+        fn parse_date_time(datetime: &str) -> NaiveDate {
+            let date_parts: Vec<&str> = datetime.split(" ").collect();
+            let date_vec: Vec<&str> = date_parts[0].split("-").collect();
+
+            return NaiveDate::from_ymd(
+                date_vec[0].parse::<i32>().unwrap(),
+                date_vec[1].parse::<u32>().unwrap(),
+                date_vec[2].parse::<u32>().unwrap(),
+            );
+        }
+
+        return Record {
+            timestamp: parse_date_time(&record[0]),
+            temperature: record[1].parse::<f32>().unwrap(),
+            humidity: record[2].parse::<f32>().unwrap(),
+        };
+    }
+}
+
 struct DaySummaries<T>(Vec<DaySummaryStats<T>>);
 
 impl fmt::Display for DaySummaries<NaiveDate> {
