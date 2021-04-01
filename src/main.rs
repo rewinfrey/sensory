@@ -108,53 +108,6 @@ struct DaySummaryStats<T> {
     pub humidity_stats: HumidityStats,
 }
 
-fn parse_date_time(datetime: &str) -> NaiveDate {
-    let date_parts: Vec<&str> = datetime.split(' ').collect();
-    let date_vec: Vec<&str> = date_parts[0].split("-").collect();
-
-    return NaiveDate::from_ymd(
-        date_vec[0].parse::<i32>().unwrap(),
-        date_vec[1].parse::<u32>().unwrap(),
-        date_vec[2].parse::<u32>().unwrap(),
-    );
-}
-
-fn csv_record_to_struct(record: csv::StringRecord) -> Record {
-    return Record {
-        timestamp: parse_date_time(&record[0]),
-        temperature: record[1].parse::<f32>().unwrap(),
-        humidity: record[2].parse::<f32>().unwrap(),
-    };
-}
-
-// Initialize a day summary stat for the given record.
-fn initialize_day_summary(record_entry: &Record) -> DaySummaryStats {
-    let temperature_stats = TemperatureStats {
-        max_temperature: record_entry.temperature,
-        min_temperature: record_entry.temperature,
-        mean_temperature: record_entry.temperature,
-        median_temperature: record_entry.temperature,
-        temperature_entries: vec![record_entry.temperature],
-        temperature_sum: record_entry.temperature,
-    };
-    let humidity_stats = HumidityStats {
-        max_humidity: record_entry.humidity,
-        min_humidity: record_entry.humidity,
-        mean_humidity: record_entry.humidity,
-        median_humidity: record_entry.humidity,
-        humidity_entries: vec![record_entry.humidity],
-        humidity_sum: record_entry.humidity,
-    };
-    return DaySummaryStats {
-        date: record_entry.timestamp,
-        temperature_stats: temperature_stats,
-        humidity_stats: humidity_stats,
-    };
-}
-
-fn update_temperature_stats(day_summary: &mut DaySummaryStats, record: &Record) {
-    // Add the temperature to the accumulated sum
-    day_summary.temperature_stats.temperature_sum += record.temperature;
 
     // First add the record to the temperature stat entries.
     day_summary.temperature_stats.temperature_entries.push(record.temperature);
