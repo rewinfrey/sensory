@@ -2,8 +2,8 @@ use chrono::{NaiveDate};
 use std::fs;
 
 #[derive(Debug)]
-struct Record {
-    pub timestamp: NaiveDate,
+struct Record<T> {
+    pub timestamp: T,
     pub temperature: f32,
     pub humidity: f32,
 }
