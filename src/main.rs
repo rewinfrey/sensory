@@ -107,63 +107,90 @@ struct DaySummaryStats<T> {
     pub date: T,
     pub temperature_stats: TemperatureStats,
     pub humidity_stats: HumidityStats,
+    pub gdd: f32, // gdd is growing degree days, a measure of heat units per day a crop receives over its lifetime relative to the minimum base temperature required for growth of that crop. e.g. corn's base temperature is 50°F. Given a day whose average temperature was 75°F, the crop would have grown by 1.5 gdd (75°F - 50°F = 15 gdd).
 }
 
+// TODO: This should be configurable as either an env var or a cli arg.
+static GDD_THRESHOLD : f32 = 65.0;
+impl DaySummaryStats<NaiveDate> {
+    fn from_record(record: &Record<NaiveDate>) -> Self {
+        let temperature_stats = TemperatureStats {
+            max_temperature: record.temperature,
+            min_temperature: record.temperature,
+            mean_temperature: record.temperature,
+            median_temperature: record.temperature,
+            temperature_entries: vec![record.temperature],
+            temperature_sum: record.temperature,
+        };
+        let humidity_stats = HumidityStats {
+            max_humidity: record.humidity,
+            min_humidity: record.humidity,
+            mean_humidity: record.humidity,
+            median_humidity: record.humidity,
+            humidity_entries: vec![record.humidity],
+            humidity_sum: record.humidity,
+        };
+        return DaySummaryStats {
+            date: record.timestamp,
+            temperature_stats: temperature_stats,
+            humidity_stats: humidity_stats,
+            gdd: record.temperature - GDD_THRESHOLD,
+        };
+    }
 
-    // First add the record to the temperature stat entries.
-    day_summary.temperature_stats.temperature_entries.push(record.temperature);
+    fn calc_temperature_stats(&mut self, record: &Record<NaiveDate>) {
+        // Add the temperature to the accumulated sum
+        self.temperature_stats.temperature_sum += record.temperature;
 
-    // Find the max temperature.
-    day_summary.temperature_stats.max_temperature = *day_summary.temperature_stats.temperature_entries.iter().max_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+        // First add the record to the temperature stat entries.
+        self.temperature_stats.temperature_entries.push(record.temperature);
 
-    // Find the min temperature.
-    day_summary.temperature_stats.min_temperature = *day_summary.temperature_stats.temperature_entries.iter().min_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+        // Find the max temperature.
+        self.temperature_stats.max_temperature = *self.temperature_stats.temperature_entries.iter().max_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
 
-    // Find the median temperature.
-    let median_index = day_summary.temperature_stats.temperature_entries.len() / 2;
-    day_summary.temperature_stats.median_temperature = day_summary.temperature_stats.temperature_entries[median_index];
+        // Find the min temperature.
+        self.temperature_stats.min_temperature = *self.temperature_stats.temperature_entries.iter().min_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
 
-    // Find the mean temperature.
-    let mean_denominator = day_summary.temperature_stats.temperature_entries.len() as f32;
-    day_summary.temperature_stats.mean_temperature = day_summary.temperature_stats.temperature_sum / mean_denominator;
-}
+        // Find the median temperature.
+        let median_index = self.temperature_stats.temperature_entries.len() / 2;
+        self.temperature_stats.median_temperature = self.temperature_stats.temperature_entries[median_index];
 
-fn update_humidity_stats(day_summary: &mut DaySummaryStats, record: &Record) {
-    // Add the humidity to the accumulated sum
-    day_summary.humidity_stats.humidity_sum += record.humidity;
+        // Find the mean temperature.
+        let mean_denominator = self.temperature_stats.temperature_entries.len() as f32;
+        self.temperature_stats.mean_temperature = self.temperature_stats.temperature_sum / mean_denominator;
+    }
 
-    // First add the record to the humidity stat entries.
-    day_summary.humidity_stats.humidity_entries.push(record.humidity);
+    fn calc_humidity_stats(&mut self, record: &Record<NaiveDate>) {
+        // Add the humidity to the accumulated sum
+        self.humidity_stats.humidity_sum += record.humidity;
 
-    // Find the max humidity.
-    day_summary.humidity_stats.max_humidity = *day_summary.humidity_stats.humidity_entries.iter().max_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+        // First add the record to the humidity stat entries.
+        self.humidity_stats.humidity_entries.push(record.humidity);
 
-    // Find the min humidity.
-    day_summary.humidity_stats.min_humidity = *day_summary.humidity_stats.humidity_entries.iter().min_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+        // Find the max humidity.
+        self.humidity_stats.max_humidity = *self.humidity_stats.humidity_entries.iter().max_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
 
-    // Find the median humidity.
-    let median_index = day_summary.humidity_stats.humidity_entries.len() / 2;
-    day_summary.humidity_stats.median_humidity = day_summary.humidity_stats.humidity_entries[median_index];
+        // Find the min humidity.
+        self.humidity_stats.min_humidity = *self.humidity_stats.humidity_entries.iter().min_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
 
-    // Find the mean humidity.
-    let mean_denominator = day_summary.humidity_stats.humidity_entries.len() as f32;
-    day_summary.humidity_stats.mean_humidity = day_summary.humidity_stats.humidity_sum / mean_denominator;
-}
+        // Find the median humidity.
+        let median_index = self.humidity_stats.humidity_entries.len() / 2;
+        self.humidity_stats.median_humidity = self.humidity_stats.humidity_entries[median_index];
 
+        // Find the mean humidity.
+        let mean_denominator = self.humidity_stats.humidity_entries.len() as f32;
+        self.humidity_stats.mean_humidity = self.humidity_stats.humidity_sum / mean_denominator;
+    }
 
-fn update_day_summaries(record_entry: &Record, day_summary: &mut Vec<DaySummaryStats>) {
-    match day_summary.last_mut() {
-        Some(day_summary_stat) => {
-            if day_summary_stat.date == record_entry.timestamp {
-                update_temperature_stats(day_summary_stat, record_entry);
-                update_humidity_stats(day_summary_stat, record_entry);
-            } else {
-                day_summary.push(initialize_day_summary(record_entry));
-            }
-        },
-        None => {
-            day_summary.push(initialize_day_summary(record_entry));
-        }
+    fn calc_growing_degrees_day(&mut self) {
+        // TODO: calculate GDD for day and night. This calculation currently uses 1 value for a 24 hour time period.
+        self.gdd = self.temperature_stats.mean_temperature - GDD_THRESHOLD;
+        // If degree day is long or short, the calculation is slightly different:
+        // if degree_day.short() {
+        //    gdd.growing_degrees_day = (day_summary.temperature_stats.mean_day_temperature + day_summary.temperature_stats.mean_night_temperature) / 2.0;
+        // } else {
+        //    gdd.growing_degrees_day = ((day_summary.temperature_stats.mean_day_temperature * 0.67) + (day_summary.temperature_stats.mean_night_temperature * 0.33)) / 2.0;
+        // }
     }
 }
 
