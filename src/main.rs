@@ -8,6 +8,8 @@ struct Record {
     pub humidity: f32,
 }
 
+struct DaySummaries<T>(Vec<DaySummaryStats<T>>);
+
 #[derive(Debug, Clone)]
 struct TemperatureStats {
     pub max_temperature: f32,
@@ -143,7 +145,7 @@ fn update_day_summaries(record_entry: &Record, day_summary: &mut Vec<DaySummaryS
 fn main() -> Result<(), csv::Error> {
     let csv = fs::read_to_string("data/example.csv").expect("Error reading csv file.");
     let mut reader = csv::Reader::from_reader(csv.as_bytes());
-    let mut day_summaries: Vec<DaySummaryStats> = Vec::new();
+    let mut day_summaries = DaySummaries(Vec::new());
 
     for record in reader.records() {
         let record: csv::StringRecord = record?;
