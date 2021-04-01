@@ -25,6 +25,26 @@ impl fmt::Display for DaySummaries<NaiveDate> {
     }
 }
 
+impl DaySummaries<NaiveDate> {
+    // Assumes Records are pre-sorted in a chronologically ascending order.
+    fn add_record(&mut self, record: &Record<NaiveDate>) {
+        match self.0.last_mut() {
+            Some(day_summary_stats) => {
+                if day_summary_stats.date == record.timestamp {
+                    day_summary_stats.calc_temperature_stats(record);
+                    day_summary_stats.calc_humidity_stats(record);
+                    day_summary_stats.calc_growing_degrees_day();
+                } else {
+                    self.0.push(DaySummaryStats::from_record(record));
+                }
+            },
+            None => {
+                self.0.push(DaySummaryStats::from_record(record));
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct TemperatureStats {
     pub max_temperature: f32,
