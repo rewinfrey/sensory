@@ -25,6 +25,21 @@ impl fmt::Display for DaySummaries<NaiveDate> {
     }
 }
 
+impl fmt::Display for DaySummaryStats<NaiveDate> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}\ntemp: mean: {} max: {} min: {}\nhumidity: mean: {} max: {} min: {}\ngdd: {}\n",
+            self.date,
+            self.temperature_stats.mean_temperature,
+            self.temperature_stats.max_temperature,
+            self.temperature_stats.min_temperature,
+            self.humidity_stats.mean_humidity,
+            self.humidity_stats.max_humidity,
+            self.humidity_stats.min_humidity,
+            self.gdd,
+        )
+    }
+}
+
 impl DaySummaries<NaiveDate> {
     // Assumes Records are pre-sorted in a chronologically ascending order.
     fn add_record(&mut self, record: &Record<NaiveDate>) {
