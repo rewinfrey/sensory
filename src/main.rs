@@ -201,12 +201,13 @@ fn main() -> Result<(), csv::Error> {
 
     for record in reader.records() {
         let record: csv::StringRecord = record?;
-        let record_entry = csv_record_to_struct(record);
-        update_day_summaries(&record_entry, &mut day_summaries);
+        let record_entry = Record::from_csv_record(record);
+        day_summaries.add_record(&record_entry);
     };
 
-    for summary in &day_summaries {
-        println!("{}:\ntemperature\nmax: {} min: {} mean: {}\nhumidity\nmax: {} min: {} mean: {}\n", summary.date, summary.temperature_stats.max_temperature, summary.temperature_stats.min_temperature, summary.temperature_stats.mean_temperature, summary.humidity_stats.max_humidity, summary.humidity_stats.min_humidity, summary.humidity_stats.mean_humidity);
+    println!("day summaries: {}", day_summaries);
+    for day_summary in &day_summaries.0 {
+        println!("{}", day_summary);
     };
 
     Ok(())
