@@ -10,6 +10,21 @@ struct Record {
 
 struct DaySummaries<T>(Vec<DaySummaryStats<T>>);
 
+impl fmt::Display for DaySummaries<NaiveDate> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut output = String::new();
+        if let Some(first_day_summary) = self.0.first() {
+            if let Some(last_day_summary) = self.0.last() {
+                output += format!("{} records for date range {} - {}", self.0.len(), first_day_summary.date, last_day_summary.date).as_str();
+            }
+        } else {
+            output += format!("length: {}, date range: <na> - <na>", self.0.len()).as_str();
+        }
+
+        write!(f, "{}", output)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct TemperatureStats {
     pub max_temperature: f32,
