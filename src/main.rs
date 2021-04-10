@@ -7,6 +7,8 @@ struct Record<T> {
     pub timestamp: T,
     pub temperature: f32,
     pub humidity: f32,
+    pub dew_point: f32,
+    pub vpd: f32,
 }
 
 impl Record<NaiveDate> {
@@ -26,6 +28,8 @@ impl Record<NaiveDate> {
             timestamp: parse_date_time(&record[0]),
             temperature: record[1].parse::<f32>().unwrap(),
             humidity: record[2].parse::<f32>().unwrap(),
+            dew_point: record[3].parse::<f32>().unwrap(),
+            vpd: record[4].parse::<f32>().unwrap(),
         };
     }
 }
@@ -49,14 +53,12 @@ impl fmt::Display for DaySummaries<NaiveDate> {
 
 impl fmt::Display for DaySummaryStats<NaiveDate> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}\ntemp: mean: {} max: {} min: {}\nhumidity: mean: {} max: {} min: {}\ngdd: {}\n",
+        write!(f, "{}\n{}\n{}\n{}\n{}\ngdd: {}\n",
             self.date,
-            self.temperature_stats.mean_temperature,
-            self.temperature_stats.max_temperature,
-            self.temperature_stats.min_temperature,
-            self.humidity_stats.mean_humidity,
-            self.humidity_stats.max_humidity,
-            self.humidity_stats.min_humidity,
+            self.temperature_stats,
+            self.humidity_stats,
+            self.dew_point_stats,
+            self.vpd_stats,
             self.gdd,
         )
     }
@@ -70,6 +72,8 @@ impl DaySummaries<NaiveDate> {
                 if day_summary_stats.date == record.timestamp {
                     day_summary_stats.calc_temperature_stats(record);
                     day_summary_stats.calc_humidity_stats(record);
+                    day_summary_stats.calc_dew_point_stats(record);
+                    day_summary_stats.calc_vpd_stats(record);
                     day_summary_stats.calc_growing_degrees_day();
                 } else {
                     self.0.push(DaySummaryStats::from_record(record));
@@ -92,6 +96,16 @@ struct TemperatureStats {
     pub temperature_sum: f32,
 }
 
+impl fmt::Display for TemperatureStats {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "temp: mean: {} max: {} min: {}",
+            self.mean_temperature,
+            self.max_temperature,
+            self.min_temperature,
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 struct HumidityStats {
     pub max_humidity: f32,
@@ -102,11 +116,63 @@ struct HumidityStats {
     pub humidity_sum: f32,
 }
 
+impl fmt::Display for HumidityStats {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "humidity: mean: {} max: {} min: {}",
+            self.mean_humidity,
+            self.max_humidity,
+            self.min_humidity,
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DewPointStats {
+    pub max_dew_point: f32,
+    pub min_dew_point: f32,
+    pub mean_dew_point: f32,
+    pub median_dew_point: f32,
+    pub dew_point_entries: Vec<f32>,
+    pub dew_point_sum: f32,
+}
+
+impl fmt::Display for DewPointStats {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "dew_point: mean: {} max: {} min: {}",
+            self.mean_dew_point,
+            self.max_dew_point,
+            self.min_dew_point,
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct VPDStats {
+    pub max_vpd: f32,
+    pub min_vpd: f32,
+    pub mean_vpd: f32,
+    pub median_vpd: f32,
+    pub vpd_entries: Vec<f32>,
+    pub vpd_sum: f32,
+}
+
+impl fmt::Display for VPDStats {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "vpd: mean: {} max: {} min: {}",
+            self.mean_vpd,
+            self.max_vpd,
+            self.min_vpd,
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 struct DaySummaryStats<T> {
     pub date: T,
     pub temperature_stats: TemperatureStats,
     pub humidity_stats: HumidityStats,
+    pub dew_point_stats: DewPointStats,
+    pub vpd_stats: VPDStats,
     pub gdd: f32, // gdd is growing degree days, a measure of heat units per day a crop receives over its lifetime relative to the minimum base temperature required for growth of that crop. e.g. corn's base temperature is 50°F. Given a day whose average temperature was 75°F, the crop would have grown by 1.5 gdd (75°F - 50°F = 15 gdd).
 }
 
@@ -130,10 +196,28 @@ impl DaySummaryStats<NaiveDate> {
             humidity_entries: vec![record.humidity],
             humidity_sum: record.humidity,
         };
+        let dew_point_stats = DewPointStats {
+            max_dew_point: record.dew_point,
+            min_dew_point: record.dew_point,
+            mean_dew_point: record.dew_point,
+            median_dew_point: record.dew_point,
+            dew_point_entries: vec![record.dew_point],
+            dew_point_sum: record.dew_point,
+        };
+        let vpd_stats = VPDStats {
+            max_vpd: record.vpd,
+            min_vpd: record.vpd,
+            mean_vpd: record.vpd,
+            median_vpd: record.vpd,
+            vpd_entries: vec![record.vpd],
+            vpd_sum: record.vpd,
+        };
         return DaySummaryStats {
             date: record.timestamp,
             temperature_stats: temperature_stats,
             humidity_stats: humidity_stats,
+            dew_point_stats: dew_point_stats,
+            vpd_stats: vpd_stats,
             gdd: record.temperature - GDD_THRESHOLD,
         };
     }
@@ -180,6 +264,50 @@ impl DaySummaryStats<NaiveDate> {
         // Find the mean humidity.
         let mean_denominator = self.humidity_stats.humidity_entries.len() as f32;
         self.humidity_stats.mean_humidity = self.humidity_stats.humidity_sum / mean_denominator;
+    }
+
+    fn calc_dew_point_stats(&mut self, record: &Record<NaiveDate>) {
+        // Add the humidity to the accumulated sum
+        self.dew_point_stats.dew_point_sum += record.dew_point;
+
+        // First add the record to the humidity stat entries.
+        self.dew_point_stats.dew_point_entries.push(record.dew_point);
+
+        // Find the max humidity.
+        self.dew_point_stats.max_dew_point = *self.dew_point_stats.dew_point_entries.iter().max_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+
+        // Find the min humidity.
+        self.dew_point_stats.min_dew_point = *self.dew_point_stats.dew_point_entries.iter().min_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+
+        // Find the median humidity.
+        let median_index = self.dew_point_stats.dew_point_entries.len() / 2;
+        self.dew_point_stats.median_dew_point = self.dew_point_stats.dew_point_entries[median_index];
+
+        // Find the mean humidity.
+        let mean_denominator = self.dew_point_stats.dew_point_entries.len() as f32;
+        self.dew_point_stats.mean_dew_point = self.dew_point_stats.dew_point_sum / mean_denominator;
+    }
+
+    fn calc_vpd_stats(&mut self, record: &Record<NaiveDate>) {
+        // Add the humidity to the accumulated sum
+        self.vpd_stats.vpd_sum += record.vpd;
+
+        // First add the record to the humidity stat entries.
+        self.vpd_stats.vpd_entries.push(record.vpd);
+
+        // Find the max humidity.
+        self.vpd_stats.max_vpd = *self.vpd_stats.vpd_entries.iter().max_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+
+        // Find the min humidity.
+        self.vpd_stats.min_vpd = *self.vpd_stats.vpd_entries.iter().min_by(|x, y| x.partial_cmp(&y).unwrap()).unwrap();
+
+        // Find the median humidity.
+        let median_index = self.vpd_stats.vpd_entries.len() / 2;
+        self.vpd_stats.median_vpd = self.vpd_stats.vpd_entries[median_index];
+
+        // Find the mean humidity.
+        let mean_denominator = self.vpd_stats.vpd_entries.len() as f32;
+        self.vpd_stats.mean_vpd = self.vpd_stats.vpd_sum / mean_denominator;
     }
 
     fn calc_growing_degrees_day(&mut self) {
