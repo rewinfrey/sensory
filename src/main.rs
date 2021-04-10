@@ -1,9 +1,10 @@
 use chrono::{NaiveDate};
+use std::collections::{HashMap};
 use std::fmt;
 use std::fs;
 
 #[derive(Debug)]
-struct Record<T> {
+struct SensorRecord<T> {
     pub timestamp: T,
     pub temperature: f32,
     pub humidity: f32,
@@ -11,7 +12,7 @@ struct Record<T> {
     pub vpd: f32,
 }
 
-impl Record<NaiveDate> {
+impl SensorRecord<NaiveDate> {
     fn from_csv_record(record: csv::StringRecord) -> Self {
         fn parse_date_time(datetime: &str) -> NaiveDate {
             let date_parts: Vec<&str> = datetime.split(" ").collect();
@@ -24,7 +25,7 @@ impl Record<NaiveDate> {
             );
         }
 
-        return Record {
+        return SensorRecord {
             timestamp: parse_date_time(&record[0]),
             temperature: record[1].parse::<f32>().unwrap(),
             humidity: record[2].parse::<f32>().unwrap(),
@@ -66,7 +67,7 @@ impl fmt::Display for DaySummaryStats<NaiveDate> {
 
 impl DaySummaries<NaiveDate> {
     // Assumes Records are pre-sorted in a chronologically ascending order.
-    fn add_record(&mut self, record: &Record<NaiveDate>) {
+    fn add_record(&mut self, record: &SensorRecord<NaiveDate>) {
         match self.0.last_mut() {
             Some(day_summary_stats) => {
                 if day_summary_stats.date == record.timestamp {
@@ -179,7 +180,7 @@ struct DaySummaryStats<T> {
 // TODO: This should be configurable as either an env var or a cli arg.
 static GDD_THRESHOLD : f32 = 65.0;
 impl DaySummaryStats<NaiveDate> {
-    fn from_record(record: &Record<NaiveDate>) -> Self {
+    fn from_record(record: &SensorRecord<NaiveDate>) -> Self {
         let temperature_stats = TemperatureStats {
             max_temperature: record.temperature,
             min_temperature: record.temperature,
@@ -222,7 +223,7 @@ impl DaySummaryStats<NaiveDate> {
         };
     }
 
-    fn calc_temperature_stats(&mut self, record: &Record<NaiveDate>) {
+    fn calc_temperature_stats(&mut self, record: &SensorRecord<NaiveDate>) {
         // Add the temperature to the accumulated sum
         self.temperature_stats.temperature_sum += record.temperature;
 
@@ -244,7 +245,7 @@ impl DaySummaryStats<NaiveDate> {
         self.temperature_stats.mean_temperature = self.temperature_stats.temperature_sum / mean_denominator;
     }
 
-    fn calc_humidity_stats(&mut self, record: &Record<NaiveDate>) {
+    fn calc_humidity_stats(&mut self, record: &SensorRecord<NaiveDate>) {
         // Add the humidity to the accumulated sum
         self.humidity_stats.humidity_sum += record.humidity;
 
@@ -266,7 +267,7 @@ impl DaySummaryStats<NaiveDate> {
         self.humidity_stats.mean_humidity = self.humidity_stats.humidity_sum / mean_denominator;
     }
 
-    fn calc_dew_point_stats(&mut self, record: &Record<NaiveDate>) {
+    fn calc_dew_point_stats(&mut self, record: &SensorRecord<NaiveDate>) {
         // Add the humidity to the accumulated sum
         self.dew_point_stats.dew_point_sum += record.dew_point;
 
@@ -288,7 +289,7 @@ impl DaySummaryStats<NaiveDate> {
         self.dew_point_stats.mean_dew_point = self.dew_point_stats.dew_point_sum / mean_denominator;
     }
 
-    fn calc_vpd_stats(&mut self, record: &Record<NaiveDate>) {
+    fn calc_vpd_stats(&mut self, record: &SensorRecord<NaiveDate>) {
         // Add the humidity to the accumulated sum
         self.vpd_stats.vpd_sum += record.vpd;
 
@@ -323,20 +324,63 @@ impl DaySummaryStats<NaiveDate> {
 }
 
 fn main() -> Result<(), csv::Error> {
-    let csv = fs::read_to_string("data/example.csv").expect("Error reading csv file.");
-    let mut reader = csv::Reader::from_reader(csv.as_bytes());
-    let mut day_summaries = DaySummaries(Vec::new());
+    let sensor_data = fs::read_to_string("data/example.csv").expect("Error reading csv file.");
+    let mut sensor_reader = csv::Reader::from_reader(sensor_data.as_bytes());
 
-    for record in reader.records() {
+    let event_data = fs::read_to_string("data/events.csv").expect("Error reading csv file.");
+    let mut event_reader = csv::Reader::from_reader(event_data.as_bytes());
+
+    let mut writer = csv::Writer::from_path("data/out_example.csv")?;
+    writer.write_record(&["date", "avg temp", "max temp", "min temp", "avg humidity", "max humidity", "min humidity", "avg dewpoint", "avg vpd", "gdd", "event"])?;
+
+    let mut event_summaries = HashMap::new();
+    for record in event_reader.records() {
         let record: csv::StringRecord = record?;
-        let record_entry = Record::from_csv_record(record);
+        let date_parts: Vec<&str> = record[0].split(" ").collect();
+        let date_vec: Vec<&str> = date_parts[0].split("-").collect();
+        let date = NaiveDate::from_ymd(
+                date_vec[0].parse::<i32>().unwrap(),
+                date_vec[1].parse::<u32>().unwrap(),
+                date_vec[2].parse::<u32>().unwrap(),
+            );
+        let event = record[1].parse::<String>().unwrap();
+        event_summaries.insert(date.to_string(), event);
+    }
+
+    let mut day_summaries = DaySummaries(Vec::new());
+    for record in sensor_reader.records() {
+        let record: csv::StringRecord = record?;
+        let record_entry = SensorRecord::from_csv_record(record);
         day_summaries.add_record(&record_entry);
     };
 
+
     println!("day summaries: {}", day_summaries);
+    let mut total_gdd = 0.0;
     for day_summary in &day_summaries.0 {
-        println!("{}", day_summary);
+        let mut event = String::new();
+        if event_summaries.contains_key(&day_summary.date.to_string()) {
+            event = event_summaries.get(&day_summary.date.to_string()).unwrap().to_string();
+        }
+
+        total_gdd += day_summary.gdd;
+
+        writer.write_record(&[
+            day_summary.date.to_string(),
+            day_summary.temperature_stats.mean_temperature.to_string(),
+            day_summary.temperature_stats.max_temperature.to_string(),
+            day_summary.temperature_stats.min_temperature.to_string(),
+            day_summary.humidity_stats.mean_humidity.to_string(),
+            day_summary.humidity_stats.max_humidity.to_string(),
+            day_summary.humidity_stats.min_humidity.to_string(),
+            day_summary.dew_point_stats.mean_dew_point.to_string(),
+            day_summary.vpd_stats.mean_vpd.to_string(),
+            total_gdd.to_string(),
+            event.to_string(),
+        ])?;
     };
+
+    writer.flush()?;
 
     Ok(())
 }
